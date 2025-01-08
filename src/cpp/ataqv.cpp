@@ -38,7 +38,6 @@ enum {
 
     OPT_METRICS_FILE,
     OPT_LOG_PROBLEMATIC_READS,
-    OPT_TABULAR_OUTPUT,
     OPT_LESS_REDUNDANT,
 
     OPT_NAME,
@@ -82,12 +81,20 @@ void print_usage() {
               << "Optional Input" << std::endl
               << "--------------" << std::endl << std::endl
 
+              << "--nucleus-barcode-tag \"nucleus_barcode_tag\"" << std::endl
+              << "    Data is single-nucleus, with the barcode stored in this BAM tag." << std::endl
+              << "    In this case, metrics will be collected per barcode, a small number of metrics unlikely" << std::endl
+              << "    to be of interest will be dropped to keep memory usage and low and reduce runtime," << std::endl
+              << "    and output will be in a tabular format to avoid the need to parse a large JSON file in" << std::endl
+              << "    downstream analysis. Note this output cannot be used with the ataqv HTML viewer." << std::endl << std::endl
+
               << "--peak-file \"file name\"" << std::endl
               << "    A BED file of peaks called for alignments in the BAM file. Specify \"auto\" to use the" << std::endl
               << "    BAM file name with \".peaks\" appended, or if the BAM file contains read groups, to" << std::endl
               << "    assume each read group has a peak file whose name is the read group ID with \".peaks\"" << std::endl
               << "    appended. If you specify a single filename instead of \"auto\" with read groups, the " << std::endl
-              << "    same peaks will be used for all reads -- be sure this is what you want." << std::endl << std::endl
+              << "    same peaks will be used for all reads -- be sure this is what you want. Not used when" << std::endl
+              << "    analyzing single-nucleus data (see --nucleus-barcode-tag)" << std::endl << std::endl
 
               << "--tss-file \"file name\"" << std::endl
               << "    A BED file of transcription start sites for the experiment organism. If supplied," << std::endl
@@ -108,25 +115,13 @@ void print_usage() {
               << "------" << std::endl << std::endl
 
               << "--metrics-file \"file name\"" << std::endl
-              << "    The JSON file to which metrics will be written. The default filename will be based on" << std::endl
-              << "    the BAM file, with the suffix \".ataqv.json\"." << std::endl << std::endl
+              << "    The file to which metrics will be written. The default filename will be based on" << std::endl
+              << "    the BAM file, with the suffix \".ataqv.json\" (for bulk data) or \".ataqv.txt.gz\" (for single-nucleus data)." << std::endl << std::endl
 
               << "--log-problematic-reads" << std::endl
               << "    If given, problematic reads will be logged to a file per read group, with names" << std::endl
               << "    derived from the read group IDs, with \".problems\" appended. If no read groups" << std::endl
               << "    are found, the reads will be written to one file named after the BAM file." << std::endl << std::endl
-
-              << "--tabular-output" << std::endl
-              << "    If given, the metrics file output will be a tabular (TSV) text file, not JSON. This " << std::endl
-              << "    output CANNOT be used to generate the HTML report, and excludes several metrics that" << std::endl
-              << "    would otherwise be included in the JSON output (e.g., the full fragment length" << std::endl
-              << "    distribution, the full TSS coverage curve, and the full mapping quality distribution)." << std::endl
-              << "    This option is not recommended when analyzing bulk ATAC-seq data, but may be useful" << std::endl
-              << "    when analyzing single nucleus ATAC-seq data with large numbers of distinct cell" << std::endl
-              << "    barcodes (say, >100k); in such a case this option should substantially reduce memory" << std::endl
-              << "    usage, reduce runtime, and avoid the need to parse a large JSON file in downstream" << std::endl
-              << "    analysis, while still outputting the metrics commonly used to QC single nucleus" << std::endl
-              << "    ATAC-seq data (TSS enrichment, read counts, and mitochondrial read counts, amongst others)." << std::endl << std::endl
 
               << "--less-redundant" << std::endl
               << "    If given, output a subset of metrics that should be less redundant. If this flag is used," << std::endl
@@ -149,10 +144,6 @@ void print_usage() {
               << "    Even if read groups are present in the BAM file, ignore them and combine metrics" << std::endl
               << "    for all reads under a single sample and library named with the --name option. This" << std::endl
               << "    also implies that a single peak file will be used for all reads; see the --peak option." << std::endl << std::endl
-
-              << "--nucleus-barcode-tag \"nucleus_barcode_tag\"" << std::endl
-              << "    Data is single-nucleus, with the barcode stored in this BAM tag." << std::endl
-              << "    In this case, metrics will be collected per barcode." << std::endl << std::endl
 
               << "--description \"description\"" << std::endl
               << "    A short description of the experiment." << std::endl << std::endl
@@ -235,7 +226,6 @@ int main(int argc, char **argv) {
     bool verbose = false;
     int thread_limit = 1;
     bool log_problematic_reads = false;
-    bool tabular_output = false;
     bool less_redundant = false;
 
     std::string name;
@@ -265,7 +255,6 @@ int main(int argc, char **argv) {
         {"version", no_argument, nullptr, OPT_VERSION},
         {"threads", required_argument, nullptr, OPT_THREADS},
         {"log-problematic-reads", no_argument, nullptr, OPT_LOG_PROBLEMATIC_READS},
-        {"tabular-output", no_argument, nullptr, OPT_TABULAR_OUTPUT},
         {"less-redundant", no_argument, nullptr, OPT_LESS_REDUNDANT},
         {"name", required_argument, nullptr, OPT_NAME},
         {"ignore-read-groups", no_argument, nullptr, OPT_IGNORE_READ_GROUPS},
@@ -300,9 +289,6 @@ int main(int argc, char **argv) {
             break;
         case OPT_LOG_PROBLEMATIC_READS:
             log_problematic_reads = true;
-            break;
-        case OPT_TABULAR_OUTPUT:
-            tabular_output = true;
             break;
         case OPT_LESS_REDUNDANT:
             less_redundant = true;
@@ -397,7 +383,6 @@ int main(int argc, char **argv) {
             ignore_read_groups,
             is_single_nucleus,
             log_problematic_reads,
-            !tabular_output,
             less_redundant,
             excluded_region_filenames);
 
@@ -405,7 +390,7 @@ int main(int argc, char **argv) {
         // construct it from the source BAM filename
         if (metrics_filename.empty()) {
             metrics_filename = basename(alignment_filename);
-            metrics_filename += ".ataqv.json";
+            metrics_filename += is_single_nucleus ? ".ataqv.txt.gz" : ".ataqv.json";
         }
 
         try {
@@ -426,9 +411,8 @@ int main(int argc, char **argv) {
 
         collector.load_alignments();
 
-        std::cout << collector << std::endl;  // Print the metrics
-
-        if (!tabular_output) {
+        if (!is_single_nucleus) {
+            std::cout << collector << std::endl;  // Print the metrics
             std::cout << "Writing JSON metrics to " << metrics_filename << std::endl << std::flush;
             *metrics_file << std::setw(2) << collector.to_json();
         } else {

@@ -230,12 +230,20 @@ The main program is ataqv, which is run as follows::
   Optional Input
   --------------
   
+  --nucleus-barcode-tag "nucleus_barcode_tag"
+      Data is single-nucleus, with the barcode stored in this BAM tag.
+      In this case, metrics will be collected per barcode, a small number of metrics unlikely
+      to be of interest will be dropped to keep memory usage and low and reduce runtime,
+      and output will be in a tabular format to avoid the need to parse a large JSON file in
+      downstream analysis. Note this output cannot be used with the ataqv HTML viewer.
+
   --peak-file "file name"
       A BED file of peaks called for alignments in the BAM file. Specify "auto" to use the
       BAM file name with ".peaks" appended, or if the BAM file contains read groups, to
       assume each read group has a peak file whose name is the read group ID with ".peaks"
-      appended. If you specify a single filename instead of "auto" with read groups, the 
-      same peaks will be used for all reads -- be sure this is what you want.
+      appended. If you specify a single filename instead of "auto" with read groups, the
+      same peaks will be used for all reads -- be sure this is what you want. Not used when
+      analyzing single-nucleus data (see --nucleus-barcode-tag)
   
   --tss-file "file name"
       A BED file of transcription start sites for the experiment organism. If supplied,
@@ -243,7 +251,7 @@ The main program is ataqv, which is run as follows::
       This calculation requires that the BAM file of alignments be indexed.
   
   --tss-extension "size"
-      If a TSS enrichment score is requested, it will be calculated for a region of 
+      If a TSS enrichment score is requested, it will be calculated for a region of
       "size" bases to either side of transcription start sites. The default is 1000bp.
   
   --excluded-region-file "file name"
@@ -254,25 +262,13 @@ The main program is ataqv, which is run as follows::
   ------
   
   --metrics-file "file name"
-      The JSON file to which metrics will be written. The default filename will be based on
-      the BAM file, with the suffix ".ataqv.json".
+      The file to which metrics will be written. The default filename will be based on
+      the BAM file, with the suffix ".ataqv.json" (for bulk data) or ".ataqv.txt.gz" (for single-nucleus data).
   
   --log-problematic-reads
       If given, problematic reads will be logged to a file per read group, with names
       derived from the read group IDs, with ".problems" appended. If no read groups
       are found, the reads will be written to one file named after the BAM file.
-
-  --tabular-output
-      If given, the metrics file output will be a tabular (TSV) text file, not JSON. This
-      output CANNOT be used to generate the HTML report, and excludes several metrics that
-      would otherwise be included in the JSON output (e.g., the full fragment length
-      distribution, the full TSS coverage curve, and the full mapping quality distribution).
-      This option is not recommended when analyzing bulk ATAC-seq data, but may be useful
-      when analyzing single nucleus ATAC-seq data with large numbers of distinct cell
-      barcodes (say, >100k); in such a case this option should substantially reduce memory
-      usage, reduce runtime, and avoid the need to parse a large JSON file in downstream
-      analysis, while still outputting the metrics commonly used to QC single nucleus
-      ATAC-seq data (TSS enrichment, read counts, and mitochondrial read counts, amongst others).
 
   --less-redundant
       If given, output a subset of metrics that should be less redundant. If this flag is used,
@@ -285,28 +281,24 @@ The main program is ataqv, which is run as follows::
   They make it easier to compare results in the ataqv web interface.
 
   --name "name"
-    A label to be used for the metrics when there are no read groups. If there are read
-    groups, each will have its metrics named using its ID field. With no read groups and
-    no --name given, your metrics will be named after the alignment file.
+      A label to be used for the metrics when there are no read groups. If there are read
+      groups, each will have its metrics named using its ID field. With no read groups and
+      no --name given, your metrics will be named after the alignment file.
 
   --ignore-read-groups
-    Even if read groups are present in the BAM file, ignore them and combine metrics
-    for all reads under a single sample and library named with the --name option. This
-    also implies that a single peak file will be used for all reads; see the --peak option.
-
-  --nucleus-barcode-tag "nucleus_barcode_tag"
-    Data is single-nucleus, with the barcode stored in this BAM tag.
-    In this case, metrics will be collected per barcode.
+      Even if read groups are present in the BAM file, ignore them and combine metrics
+      for all reads under a single sample and library named with the --name option. This
+      also implies that a single peak file will be used for all reads; see the --peak option.
 
   --description "description"
-    A short description of the experiment.
+      A short description of the experiment.
 
   --url "URL"
-    A URL for more detail on the experiment (perhaps using a DOI).
+      A URL for more detail on the experiment (perhaps using a DOI).
 
   --library-description "description"
-    Use this description for all libraries in the BAM file, instead of using the DS
-    field from each read group.
+      Use this description for all libraries in the BAM file, instead of using the DS
+      field from each read group.
 
   Reference Genome Configuration
   ------------------------------
@@ -336,11 +328,12 @@ The main program is ataqv, which is run as follows::
     use this option to supply the correct name. Again, if this name is wrong, all the
     measurements involving mitochondrial alignments will be wrong.
 
-When run, ataqv prints a human-readable summary to its standard
-output, and writes complete metrics to the JSON file named with the
-`--metrics-file` option.
+When run with bulk ATAC-seq data (i.e., without the `--nucleus-barcode-tag` option),
+ataqv prints a human-readable summary to its standard output, and writes complete metrics
+to the JSON file named with the `--metrics-file` option. When run with single-nucleus data,
+ataqv writes a table of QC metrics to the text file named with the `--metrics-file` option.
 
-The JSON output can be incorporated into a web application that
+The JSON output from bulk ATAC-seq data can be incorporated into a web application that
 presents tables and plots of the metrics, and makes it easy to compare
 results across samples or experiments. Use the ``mkarv`` script to
 create a local instance of the result viewer (run ``mkarv -h`` for complete instructions). A web server is not
@@ -394,14 +387,15 @@ our `GitHub docs`_ for updates.
 Performance
 ***********
 
-It's not currently concurrent, so don't allocate it more than a single
-processor. Memory usage should typically be no more than a few hundred
-megabytes.
-
-Anecdotally, processing a 41GB BAM file containing 1,126,660,186
+For bulk data, memory usage should typically be no more than a few hundred
+megabytes. Anecdotally, processing a 41GB BAM file containing 1,126,660,186
 alignments of the data from the ATAC-seq paper took just under 20
 minutes and 2GB of memory. Adding peak metrics extended the run time
 to almost 40 minutes, but it still used the same amount of memory.
+
+For single-nucleus data, runtime and memory usage will increase. Anecdotally,
+processing a 47GB BAM file containing 974,798,149 alignments and over 625,000 distinct
+nucleus barcodes took approximately 3 hours, 10 minutes and less than 4GB of memory.
 
 .. _Parker lab: http://theparkerlab.org/
 .. _Boost: http://www.boost.org/

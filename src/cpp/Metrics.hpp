@@ -68,7 +68,6 @@ public:
     bool ignore_read_groups = false;
     bool is_single_nucleus = false;
     bool log_problematic_reads = false;
-    bool output_tss_coverage = true;
     bool less_redundant = false;
 
     std::vector<std::string> excluded_region_filenames = {};
@@ -91,7 +90,6 @@ public:
                      bool ignore_read_groups = false,
                      bool is_single_nucleus = false,
                      bool log_problematic_reads = false,
-                     bool output_tss_coverage = true,
                      bool less_redundant = false,
                      const std::vector<std::string>& excluded_region_filenames = {});
 
@@ -237,6 +235,7 @@ public:
     double median_mapq() const;
     double median_fragment_length() const;
     nlohmann::json to_json();
+    std::string to_table();
 };
 
 std::ostream& operator<<(std::ostream& os, const Metrics& metrics);

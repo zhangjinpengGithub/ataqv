@@ -39,7 +39,6 @@ MetricsCollector::MetricsCollector(const std::string& name,
                                    bool ignore_read_groups,
                                    bool is_single_nucleus,
                                    bool log_problematic_reads,
-                                   bool output_tss_coverage,
                                    bool less_redundant,
                                    const std::vector<std::string>& excluded_region_filenames) :
     metrics({}),
@@ -60,7 +59,6 @@ MetricsCollector::MetricsCollector(const std::string& name,
     ignore_read_groups(ignore_read_groups),
     is_single_nucleus(is_single_nucleus),
     log_problematic_reads(log_problematic_reads),
-    output_tss_coverage(output_tss_coverage),
     less_redundant(less_redundant),
     excluded_region_filenames(excluded_region_filenames)
 {
@@ -417,7 +415,7 @@ void MetricsCollector::load_alignments() {
             }
         }
 
-        if (output_tss_coverage) {
+        if (!is_single_nucleus) {
             calculate_tss_coverage();
         } else {
             calculate_tss_coverage_summary();
@@ -481,7 +479,7 @@ Metrics::Metrics(MetricsCollector* collector, const std::string& name): collecto
 
     if (!collector->tss_filename.empty()) {
         tss_requested = true;
-        tss_coverage_requested = collector->output_tss_coverage;
+        tss_coverage_requested = !(collector->is_single_nucleus);
 
         if (tss_coverage_requested) {
             for (int i = 1; i <= 1 + 2 * collector->tss_extension; i++) {
@@ -1855,6 +1853,114 @@ nlohmann::json Metrics::to_json() {
     return result;
 }
 
+std::string Metrics::to_table() {
+
+    unsigned long long int max_autosome_counts = 0;
+    unsigned long long int total_autosome_counts = 0;
+
+    for (auto it : chromosome_counts) {
+        std::string chromosome = it.first;
+        unsigned long long int reads_from_chromosome = it.second;
+
+        if (is_autosomal(chromosome)) {
+                total_autosome_counts += reads_from_chromosome;
+                if (reads_from_chromosome > max_autosome_counts) {
+                        max_autosome_counts = reads_from_chromosome;
+                }
+        }
+    }
+
+    long double max_fraction_reads_from_single_autosome = total_autosome_counts == 0 ? std::nan("") : max_autosome_counts / (long double) total_autosome_counts;
+    long double short_mononucleosomal_ratio = fraction(hqaa_short_count, hqaa_mononucleosomal_count);
+
+    std::string header = "";
+    std::string values = "";
+
+    header += "name\t";
+    values += (name + "\t");
+    header += "organism\t";
+    values += (collector->organism + "\t");
+    header += "total_reads\t";
+    values += (std::to_string(total_reads) + "\t");
+    header += "hqaa\t";
+    values += (std::to_string(hqaa) + "\t");
+    header += "forward_reads\t";
+    values += (std::to_string(forward_reads) + "\t");
+    header += "reverse_reads\t";
+    values += (std::to_string(reverse_reads) + "\t");
+    header += "secondary_reads\t";
+    values += (std::to_string(secondary_reads) + "\t");
+    header += "supplementary_reads\t";
+    values += (std::to_string(supplementary_reads) + "\t");
+    header += "duplicate_reads\t";
+    values += (std::to_string(duplicate_reads) + "\t");
+    header += "paired_reads\t";
+    values += (std::to_string(paired_reads) + "\t");
+    header += "properly_paired_and_mapped_reads\t";
+    values += (std::to_string(properly_paired_and_mapped_reads) + "\t");
+    header += "fr_reads\t";
+    values += (std::to_string(fr_reads) + "\t");
+    header += "ff_reads\t";
+    values += (std::to_string(ff_reads) + "\t");
+    header += "rf_reads\t";
+    values += (std::to_string(rf_reads) + "\t");
+    header += "rr_reads\t";
+    values += (std::to_string(rr_reads) + "\t");
+    header += "first_reads\t";
+    values += (std::to_string(first_reads) + "\t");
+    header += "second_reads\t";
+    values += (std::to_string(second_reads) + "\t");
+    header += "forward_mate_reads\t";
+    values += (std::to_string(forward_mate_reads) + "\t");
+    header += "reverse_mate_reads\t";
+    values += (std::to_string(reverse_mate_reads) + "\t");
+    header += "unmapped_reads\t";
+    values += (std::to_string(unmapped_reads) + "\t");
+    header += "unmapped_mate_reads\t";
+    values += (std::to_string(unmapped_mate_reads) + "\t");
+    header += "qcfailed_reads\t";
+    values += (std::to_string(qcfailed_reads) + "\t");
+    header += "unpaired_reads\t";
+    values += (std::to_string(unpaired_reads) + "\t");
+    header += "reads_with_mate_mapped_to_different_reference\t";
+    values += (std::to_string(reads_with_mate_mapped_to_different_reference) + "\t");
+    header += "reads_mapped_with_zero_quality\t";
+    values += (std::to_string(reads_mapped_with_zero_quality) + "\t");
+    header += "reads_mapped_and_paired_but_improperly\t";
+    values += (std::to_string(reads_mapped_and_paired_but_improperly) + "\t");
+    header += "unclassified_reads\t";
+    values += (std::to_string(unclassified_reads) + "\t");
+    header += "maximum_proper_pair_fragment_size\t";
+    values += (std::to_string(maximum_proper_pair_fragment_size) + "\t");
+    header += "reads_with_mate_too_distant\t";
+    values += (std::to_string(reads_with_mate_too_distant) + "\t");
+    header += "total_autosomal_reads\t";
+    values += (std::to_string(total_autosomal_reads) + "\t");
+    header += "total_mitochondrial_reads\t";
+    values += (std::to_string(total_mitochondrial_reads) + "\t");
+    header += "duplicate_autosomal_reads\t";
+    values += (std::to_string(duplicate_autosomal_reads) + "\t");
+    header += "duplicate_mitochondrial_reads\t";
+    values += (std::to_string(duplicate_mitochondrial_reads) + "\t");
+    header += "hqaa_tf_count\t";
+    values += (std::to_string(hqaa_short_count) + "\t");
+    header += "hqaa_mononucleosomal_count\t";
+    values += (std::to_string(hqaa_mononucleosomal_count) + "\t");
+    header += "short_mononucleosomal_ratio\t";
+    values += (std::to_string(short_mononucleosomal_ratio) + "\t");
+    header += "median_fragment_length\t";
+    values += (std::to_string(median_fragment_length()) + "\t");
+    header += "mean_mapq\t";
+    values += (std::to_string(mean_mapq()) + "\t");
+    header += "median_mapq\t";
+    values += (std::to_string(median_mapq()) + "\t");
+    header += "tss_enrichment\t";
+    values += (std::to_string(tss_enrichment) + "\t");
+    header += "max_fraction_reads_from_single_autosome";
+    values += std::to_string(max_fraction_reads_from_single_autosome);
+    return header + "\n" + values + "\n";
+}
+
 //
 // Produce text version of all of a collector's Metrics
 //
@@ -1877,51 +1983,18 @@ nlohmann::json MetricsCollector::to_json() {
 }
 
 void MetricsCollector::to_table(boost::shared_ptr<boost::iostreams::filtering_ostream> metrics_table) {
-    // excludes the following from the json:
-    //  - organism
-    //  - description
-    //  - url
-    //  - library
-    //  - fragment_length_counts_fields
-    //  - fragment_length_counts
-    //  - fragment_length_distance
-    //  - mapq_counts_fields
-    //  - mapq_counts
-    //  - peaks_fields
-    //  - peaks
-    //  - peak_percentiles
-    //  - tss_coverage
-    //  - chromosome_counts
 
-    std::vector<std::string> print_metrics = {"name", "total_reads", "hqaa", "forward_reads", "reverse_reads", "secondary_reads", "supplementary_reads", "duplicate_reads", "paired_reads", "properly_paired_and_mapped_reads", "fr_reads", "ff_reads", "rf_reads", "rr_reads", "first_reads", "second_reads", "forward_mate_reads", "reverse_mate_reads", "unmapped_reads", "unmapped_mate_reads", "qcfailed_reads", "unpaired_reads", "reads_with_mate_mapped_to_different_reference", "reads_mapped_with_zero_quality", "reads_mapped_and_paired_but_improperly", "unclassified_reads", "maximum_proper_pair_fragment_size", "reads_with_mate_too_distant", "total_autosomal_reads", "total_mitochondrial_reads", "duplicate_autosomal_reads", "duplicate_mitochondrial_reads", "hqaa_tf_count", "hqaa_mononucleosomal_count", "short_mononucleosomal_ratio", "hqaa_in_peaks", "duplicates_in_peaks", "duplicates_not_in_peaks", "ppm_in_peaks", "ppm_not_in_peaks", "duplicate_fraction_in_peaks", "duplicate_fraction_not_in_peaks", "peak_duplicate_ratio", "median_fragment_length", "mean_mapq", "median_mapq", "total_peaks", "total_peak_territory", "hqaa_overlapping_peaks_percent", "tss_enrichment", "max_fraction_reads_from_single_autosome"};
-
-    for (unsigned int i = 0; i < print_metrics.size(); i++) {
-        *metrics_table << print_metrics[i];
-        if (i < print_metrics.size() - 1) {
-            *metrics_table << "\t";
-        } else {
-            *metrics_table << std::endl;
-        }
-    }
+    unsigned long long int count = 0;
 
     for (auto m : metrics) {
-        nlohmann::json result = m.second->to_json();
-
-        auto j = result["metrics"].template get<std::unordered_map<std::string, nlohmann::json>>();
-
-        for (unsigned int i = 0; i < print_metrics.size(); i++) {
-            nlohmann::json value = j[print_metrics[i]];
-            if (value.is_string()) {
-                *metrics_table << value.get<std::string>();
-            } else {
-                *metrics_table << j[print_metrics[i]];
-            }
-            if (i < print_metrics.size() - 1) {
-                *metrics_table << "\t";
-            } else {
-                *metrics_table << std::endl;
-            }
+        count++;
+        std::string table = m.second->to_table();
+        if (count > 1) {
+            // remove header
+            table = table.substr(table.find("\n") + 1);
         }
+
+        *metrics_table << table;
     }
 
 }
